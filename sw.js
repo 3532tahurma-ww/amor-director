@@ -4,7 +4,7 @@
  * arka planda güncellenir (stale-while-revalidate).
  * Yeni sürüm yayınlarken VERSION'ı artır, eski önbellek silinir.
  */
-const VERSION = 'amor-director-v10';
+const VERSION = 'amor-director-v11';
 const CORE = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/store.js', './js/figure.js', './js/places.js', './js/texts.js', './js/app.js',

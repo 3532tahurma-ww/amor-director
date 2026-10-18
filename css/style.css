@@ -218,6 +218,28 @@ select.field { padding: 8px 10px; flex: 1; }
 .toast { padding: 10px 16px; border-radius: 12px; background: rgba(29, 29, 40, .92); color: #fff; font-size: 14px; animation: toast-in .25s ease; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
+/* Tam ekran: sahne tüm ekranı kaplar (4:3 oranı korunur), üstte küçük araç çubuğu */
+.fs-bar { display: none; }
+.editor.fs .stage-wrap {
+  position: fixed; inset: 0; z-index: 30; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #14101f;
+  padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+.editor.fs .stage-box { width: min(100vw, 100vh * 4 / 3); width: min(100vw, 100dvh * 4 / 3); max-width: none; }
+.editor.fs #stage { border-radius: 0; box-shadow: none; }
+.editor.fs .fs-bar {
+  position: fixed; z-index: 31; display: flex; align-items: center; gap: 6px;
+  top: calc(8px + var(--safe-t)); left: calc(8px + env(safe-area-inset-left, 0px));
+  padding: 4px; border-radius: 14px; background: rgba(255, 255, 255, .88);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .25); backdrop-filter: blur(6px);
+}
+.fs-bar .icon-btn { width: 36px; height: 36px; }
+.fs-bar b { min-width: 34px; text-align: center; font-size: 13px; }
+.icon-btn.flip svg { transform: scaleX(-1); }
+.editor.fs .ed-top { visibility: hidden; }
+html.fs-lock, html.fs-lock body { overflow: hidden; overscroll-behavior: none; }
+
 .panel-toggle { display: none; }
 .panel-toggle.on { background: var(--purple-soft); color: var(--purple); }
 

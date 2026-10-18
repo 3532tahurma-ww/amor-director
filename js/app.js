@@ -43,6 +43,8 @@ window.Director = window.Director || {};
     undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
     stop: '<svg viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>',
+    full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    exit: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
     panel: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14.5 5v14" stroke="currentColor" stroke-width="2"/></svg>'
   };
 
@@ -81,6 +83,7 @@ window.Director = window.Director || {};
 
   function home() {
     ed = null;
+    document.documentElement.classList.remove('fs-lock');
     const scenes = Store.state.scenes.slice().sort((a, b) => b.updated - a.updated);
     view.innerHTML = `
       <header class="top"><div class="brand">am<span>o</span>r <small>director</small></div></header>
@@ -227,8 +230,9 @@ window.Director = window.Director || {};
           <a class="icon-btn" href="#/home" aria-label="Geri">${ICON.back}</a>
           <input class="title" id="title" value="${esc(sc.title)}" maxlength="40">
           <button class="icon-btn panel-toggle" id="panelToggle" aria-label="Paneli aç/kapat" title="Paneli aç/kapat">${ICON.panel}</button>
+          <button class="icon-btn" id="fsBtn" aria-label="Tam ekran" title="Tam ekran">${ICON.full}</button>
           <button class="icon-btn" id="undo" aria-label="Geri al">${ICON.undo}</button>
-          <button class="icon-btn primary" id="play" aria-label="Oynat">${ICON.play}</button>
+          <button class="icon-btn primary" id="play" data-play aria-label="Oynat">${ICON.play}</button>
         </header>
         <div class="ed-main">
           <div class="ed-left">
@@ -240,6 +244,14 @@ window.Director = window.Director || {};
                 <button data-z="fit" aria-label="Sahneye sığdır">⤢</button>
                 <button data-z="focus" aria-label="Seçili figüre odaklan">◎</button>
               </div>
+            </div>
+            <div class="fs-bar">
+              <button class="icon-btn" id="fsExit" aria-label="Tam ekrandan çık">${ICON.exit}</button>
+              <button class="icon-btn" data-undo aria-label="Geri al">${ICON.undo}</button>
+              <button class="icon-btn primary" data-play aria-label="Oynat">${ICON.play}</button>
+              <button class="icon-btn" data-fr="-1" aria-label="Önceki kare">${ICON.back}</button>
+              <b id="fsLabel"></b>
+              <button class="icon-btn flip" data-fr="1" aria-label="Sonraki kare">${ICON.back}</button>
             </div></div>
             <div class="frames-bar">
               <b id="frLabel"></b>
@@ -270,6 +282,28 @@ window.Director = window.Director || {};
     panelState();
     $('#undo').onclick = undo;
     $('#play').onclick = play;
+    $('#fsBtn').onclick = () => {
+      ed.fs = true;
+      ed.fsDismissed = false;
+      const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) try { const r = req.call(el); if (r && r.catch) r.catch(() => {}); } catch (e) { /* desteklenmiyor */ }
+      fsState();
+    };
+    $('#fsExit').onclick = () => {
+      ed.fs = false;
+      if (landscape.matches) ed.fsDismissed = true; // yan dönükken elle çıkıldı: tekrar açma
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      fsState();
+    };
+    $('.fs-bar').onclick = e => {
+      const b = e.target.closest('[data-fr],[data-play],[data-undo]');
+      if (!b) return;
+      if (b.hasAttribute('data-play')) return play();
+      if (b.hasAttribute('data-undo')) return undo();
+      stop();
+      ed.fi = clamp(ed.fi + +b.dataset.fr, 0, sc.frames.length - 1);
+      renderAll();
+    };
     $('#frEase').onchange = e => {
       snapshot();
       cur().ease = e.target.value;
@@ -316,7 +350,27 @@ window.Director = window.Director || {};
     bindStage();
     bindPanel();
     renderAll();
+    fsState();
   }
+
+  /* ---------- Tam ekran: elle (⛶) ya da telefon yan çevrilince kendiliğinden ---------- */
+
+  const landscape = window.matchMedia('(orientation: landscape) and (max-height: 520px)');
+
+  function fsState() {
+    if (!ed || !$('.editor')) return;
+    const on = !!(ed.fs || (landscape.matches && !ed.fsDismissed));
+    $('.editor').classList.toggle('fs', on);
+    document.documentElement.classList.toggle('fs-lock', on); // arkadaki sayfa kaymasın
+    renderStage(); // sahne boyutu değişti: tutamaçlar yeniden ölçeklensin
+  }
+
+  const onRotate = () => { if (ed) { ed.fsDismissed = false; fsState(); } };
+  if (landscape.addEventListener) landscape.addEventListener('change', onRotate);
+  else if (landscape.addListener) landscape.addListener(onRotate);
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && ed && ed.fs) { ed.fs = false; fsState(); }
+  });
 
   function renderStage() {
     const prev = Store.state.onion && ed.fi > 0 ? ed.sc.frames[ed.fi - 1] : null, svg = $('#stage');
@@ -327,6 +381,7 @@ window.Director = window.Director || {};
   function renderFrames() {
     const sc = ed.sc;
     $('#frLabel').textContent = `Kare ${ed.fi + 1}/${sc.frames.length}`;
+    $('#fsLabel').textContent = `${ed.fi + 1}/${sc.frames.length}`;
     $('#delFrame').disabled = sc.frames.length < 2;
     if (document.activeElement !== $('#frDur')) $('#frDur').value = frameDur(cur()) / 1000;
     $('#frEase').value = cur().ease || 'smooth';
@@ -793,7 +848,7 @@ window.Director = window.Director || {};
     const sc = ed.sc, n = sc.frames.length;
     if (n < 2) return toast('Oynatmak için en az 2 kare ekle');
     ed.playing = true;
-    $('#play').innerHTML = ICON.stop;
+    document.querySelectorAll('[data-play]').forEach(b => { b.innerHTML = ICON.stop; });
     // Her kare kendi süresi kadar sonrakine geçer; son karenin süresi döngü öncesi bekleme
     const durs = sc.frames.map(frameDur), cycle = durs.reduce((a, v) => a + v, 0);
     const springs = {};
@@ -833,7 +888,7 @@ window.Director = window.Director || {};
     if (!ed || !ed.playing) return;
     ed.playing = false;
     cancelAnimationFrame(ed.raf);
-    $('#play').innerHTML = ICON.play;
+    document.querySelectorAll('[data-play]').forEach(b => { b.innerHTML = ICON.play; });
     renderStage();
   }
 
