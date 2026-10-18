@@ -96,6 +96,25 @@ svg { display: block; }
 .icon-btn.primary { background: var(--purple); color: #fff; }
 
 .stage-wrap { padding: 12px; }
+.stage-box { position: relative; margin: 0 auto; }
+.zoom {
+  position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 2px;
+  padding: 3px; border-radius: 12px; background: rgba(255, 255, 255, .88);
+  box-shadow: 0 2px 8px rgba(29, 29, 40, .15); backdrop-filter: blur(6px);
+}
+.zoom button { width: 34px; height: 34px; border-radius: 9px; font-size: 18px; font-weight: 700; color: var(--text); }
+.zoom button:active { background: var(--purple-soft); }
+.zoom span { min-width: 42px; text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+
+/* Telefon: sahne üstte yapışık kalır, kenar boşluğu daralır */
+@media (max-width: 899px) {
+  .stage-wrap {
+    position: sticky; top: calc(61px + var(--safe-t)); z-index: 4;
+    padding: 6px 6px 8px; background: var(--bg);
+  }
+  #stage { border-radius: 12px; }
+  .zoom { right: 6px; bottom: 6px; }
+}
 #stage {
   width: 100%; height: auto; border-radius: 16px; background: #fff;
   box-shadow: 0 4px 18px rgba(29, 29, 40, .1);
@@ -199,9 +218,16 @@ select.field { padding: 8px 10px; flex: 1; }
 .toast { padding: 10px 16px; border-radius: 12px; background: rgba(29, 29, 40, .92); color: #fff; font-size: 14px; animation: toast-in .25s ease; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
-/* Geniş ekran: sahne solda, panel sağda */
+.panel-toggle { display: none; }
+.panel-toggle.on { background: var(--purple-soft); color: var(--purple); }
+
+/* Geniş ekran: sahne solda, panel sağda (açılıp kapanabilir) */
 @media (min-width: 900px) {
+  .panel-toggle { display: grid; }
   .ed-main { display: grid; grid-template-columns: 1fr 360px; align-items: start; }
+  .panel-hidden .ed-main { grid-template-columns: 1fr; }
+  .panel-hidden .panel { display: none; }
+  .stage-box { max-width: calc((100vh - 230px) * 4 / 3); } /* sahne ekrana sığsın */
   .panel {
     position: sticky; top: 72px; margin: 12px 12px 12px 0; border-radius: 20px;
     min-height: 0; max-height: calc(100vh - 84px); overflow-y: auto;

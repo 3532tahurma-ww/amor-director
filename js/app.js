@@ -42,7 +42,8 @@ window.Director = window.Director || {};
     back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
-    stop: '<svg viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>'
+    stop: '<svg viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>',
+    panel: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14.5 5v14" stroke="currentColor" stroke-width="2"/></svg>'
   };
 
   let ed = null; // açık düzenleyicinin durumu
@@ -60,13 +61,13 @@ window.Director = window.Director || {};
   const order = figs => figs.slice().sort((a, b) => (a.z || 0) - (b.z || 0) || a.y - b.y); // önce katman, sonra derinlik
 
   // prev: önceki kare (silüet olarak soluk çizilir)
-  function stageInner(sc, frame, sel, prev) {
+  function stageInner(sc, frame, sel, prev, unit) {
     const figs = order(frame.figs), s = figs.find(f => f.id === sel);
     const anchorOf = id => { const f = frame.figs.find(x => x.id === id); return f ? Figure.anchor(f, 'top') : null; };
     return Places.draw(sc.place) +
       (prev ? `<g class="onion" opacity=".3" pointer-events="none">${order(prev.figs).map(f => Figure.svg(f)).join('')}</g>` : '') +
       [-1, 0, 1].map(layer => figs.map(f => Figure.svg(f, layer)).join('')).join('') + // parça katmanları
-      Texts.svg(frame, anchorOf) + (s ? Figure.handles(s) : '');
+      Texts.svg(frame, anchorOf) + (s ? Figure.handles(s, unit) : '');
   }
 
   function nextName(sc, g) {
@@ -174,30 +175,72 @@ window.Director = window.Director || {};
     if (!Store.save()) toast('Depolama dolu, kaydedilemedi');
   }
 
-  function undo() {
-    if (!ed.hist.length) return toast('Geri alınacak bir şey yok');
-    const s = JSON.parse(ed.hist.pop());
+  /* ---------- Yakınlaştırma (sahne viewBox'ı) ---------- */
+
+  const MIN_W = 96; // en yakın: sahnenin 1/5'i
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const viewH = w => w * H / W;
+
+  function setView(x, y, w) {
+    w = clamp(w, MIN_W, W);
+    ed.view = { x: clamp(x, 0, W - w), y: clamp(y, 0, H - viewH(w)), w };
+    $('#stage').setAttribute('viewBox', `${n2(ed.view.x)} ${n2(ed.view.y)} ${n2(w)} ${n2(viewH(w))}`);
+    $('#zoomLabel').textContent = Math.round(W / w * 100) + '%';
+    if (!ed.playing) renderStage();
+  }
+  const n2 = v => Math.round(v * 100) / 100;
+
+  // (cx, cy) sahne noktası yerinde kalacak şekilde yakınlaştır
+  function zoomAt(factor, cx, cy) {
+    const v = ed.view, w = clamp(v.w / factor, MIN_W, W);
+    setView(cx - (cx - v.x) * w / v.w, cy - (cy - v.y) * viewH(w) / viewH(v.w), w);
+  }
+
+  function zoomTo(kind) {
+    const v = ed.view, f = selFig();
+    if (kind === 'in' || kind === 'out') return zoomAt(kind === 'in' ? 1.5 : 1 / 1.5, v.x + v.w / 2, v.y + viewH(v.w) / 2);
+    if (kind === 'fit' || !f) return setView(0, 0, W);
+    const c = Figure.anchor(f, 'hip'), w = clamp(235 * f.scale, MIN_W, W); // figür boydan boya sığsın
+    setView(c.x - w / 2, c.y - viewH(w) / 2, w);
+  }
+
+  function restore(json) {
+    const s = JSON.parse(json);
     ed.sc.frames = s.frames;
     ed.sc.place = s.place;
     ed.fi = Math.min(ed.fi, ed.sc.frames.length - 1);
     if (!selFig()) ed.sel = null;
+  }
+
+  function undo() {
+    if (!ed.hist.length) return toast('Geri alınacak bir şey yok');
+    restore(ed.hist.pop());
     commit();
     renderAll();
   }
 
   function openEditor(sc) {
-    ed = { sc, fi: 0, sel: null, tab: 'fig', hist: [], drag: null, playing: false, sliding: false };
+    ed = { sc, fi: 0, sel: null, tab: 'fig', hist: [], drag: null, playing: false, sliding: false, view: { x: 0, y: 0, w: W } };
     view.innerHTML = `
       <div class="editor">
         <header class="ed-top">
           <a class="icon-btn" href="#/home" aria-label="Geri">${ICON.back}</a>
           <input class="title" id="title" value="${esc(sc.title)}" maxlength="40">
+          <button class="icon-btn panel-toggle" id="panelToggle" aria-label="Paneli aç/kapat" title="Paneli aç/kapat">${ICON.panel}</button>
           <button class="icon-btn" id="undo" aria-label="Geri al">${ICON.undo}</button>
           <button class="icon-btn primary" id="play" aria-label="Oynat">${ICON.play}</button>
         </header>
         <div class="ed-main">
           <div class="ed-left">
-            <div class="stage-wrap"><svg id="stage" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"></svg></div>
+            <div class="stage-wrap"><div class="stage-box"><svg id="stage" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"></svg>
+              <div class="zoom" id="zoom">
+                <button data-z="out" aria-label="Uzaklaştır">−</button>
+                <span id="zoomLabel">100%</span>
+                <button data-z="in" aria-label="Yakınlaştır">+</button>
+                <button data-z="fit" aria-label="Sahneye sığdır">⤢</button>
+                <button data-z="focus" aria-label="Seçili figüre odaklan">◎</button>
+              </div>
+            </div></div>
             <div class="frames-bar">
               <b id="frLabel"></b>
               <label class="dur" title="Bu kareden sonrakine geçiş süresi (son karede bekleme)">Süre <input type="number" id="frDur" min="0.05" max="60" step="0.05"> sn</label>
@@ -213,6 +256,18 @@ window.Director = window.Director || {};
       </div>`;
 
     $('#title').onchange = e => { sc.title = e.target.value.trim() || 'Sahne'; commit(); };
+    $('#zoom').onclick = e => { const b = e.target.closest('[data-z]'); if (b) zoomTo(b.dataset.z); };
+    const panelState = () => {
+      $('.editor').classList.toggle('panel-hidden', !!Store.state.panelHidden);
+      $('#panelToggle').classList.toggle('on', !Store.state.panelHidden);
+    };
+    $('#panelToggle').onclick = () => {
+      Store.state.panelHidden = !Store.state.panelHidden;
+      Store.save();
+      panelState();
+      renderStage(); // sahne genişliği değişti: tutamaç boyutu yeniden hesaplansın
+    };
+    panelState();
     $('#undo').onclick = undo;
     $('#play').onclick = play;
     $('#frEase').onchange = e => {
@@ -264,8 +319,9 @@ window.Director = window.Director || {};
   }
 
   function renderStage() {
-    const prev = Store.state.onion && ed.fi > 0 ? ed.sc.frames[ed.fi - 1] : null;
-    $('#stage').innerHTML = stageInner(ed.sc, cur(), ed.sel, prev);
+    const prev = Store.state.onion && ed.fi > 0 ? ed.sc.frames[ed.fi - 1] : null, svg = $('#stage');
+    const unit = svg.clientWidth ? ed.view.w / svg.clientWidth : 0; // ekran pikseli başına sahne birimi
+    svg.innerHTML = stageInner(ed.sc, cur(), ed.sel, prev, unit);
   }
 
   function renderFrames() {
@@ -600,8 +656,44 @@ window.Director = window.Director || {};
     const pt = e => new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
     const local = (f, p) => ({ x: (p.x - f.x) / (f.flip ? -f.scale : f.scale), y: (p.y - f.y) / f.scale });
 
+    const pointers = new Map();
+    let pinch = null;
+
+    // İki parmak: sıkıştırarak yakınlaştır, birlikte kaydır
+    const startPinch = () => {
+      const [a, b] = [...pointers.values()], r = svg.getBoundingClientRect();
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, view: Object.assign({}, ed.view), r };
+    };
+    const movePinch = () => {
+      const [a, b] = [...pointers.values()], { r, view: v0 } = pinch;
+      const w = clamp(v0.w * pinch.d / (Math.hypot(a.x - b.x, a.y - b.y) || 1), MIN_W, W);
+      const cx = v0.x + (pinch.mx - r.left) / r.width * v0.w, cy = v0.y + (pinch.my - r.top) / r.height * viewH(v0.w);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      setView(cx - (mx - r.left) / r.width * w, cy - (my - r.top) / r.height * viewH(w), w);
+    };
+
+    svg.addEventListener('wheel', e => {
+      e.preventDefault();
+      const p = pt(e);
+      zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, p.x, p.y);
+    }, { passive: false });
+
     svg.addEventListener('pointerdown', e => {
       if (ed.playing) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      svg.setPointerCapture(e.pointerId);
+      if (pointers.size === 2) {
+        // ikinci parmak geldi: başlamış sürüklemeyi geri al, yakınlaştırmaya geç
+        const d = ed.drag;
+        if (d && !d.pan) {
+          const s = ed.hist.pop();
+          if (d.moved) restore(s);
+        }
+        ed.drag = null;
+        startPinch();
+        return renderStage();
+      }
+      if (pointers.size > 2) return;
       const tb = e.target.closest('[data-txt]');
       if (tb) {
         const t = cur().texts.find(x => x.id === tb.dataset.txt), p = pt(e);
@@ -609,13 +701,13 @@ window.Director = window.Director || {};
         if (t.kind === 'caption') return;
         snapshot();
         ed.drag = { text: t, px: p.x, py: p.y, dx: t.dx || 0, dy: t.dy == null ? -16 : t.dy, moved: false };
-        svg.setPointerCapture(e.pointerId);
         return e.preventDefault();
       }
       const g = e.target.closest('[data-fig]'), h = e.target.closest('[data-h]');
       if (!g) {
-        if (ed.sel) { ed.sel = null; renderStage(); renderPanel(); }
-        return;
+        // boş alan: sürüklenirse sahneyi kaydır, dokunup bırakılırsa seçimi kaldır
+        ed.drag = { pan: true, cx: e.clientX, cy: e.clientY, view: Object.assign({}, ed.view), moved: false };
+        return e.preventDefault();
       }
       const f = cur().figs.find(x => x.id === g.dataset.fig);
       const limb = h && h.dataset.h.startsWith('L.') && h.dataset.h.split('.')[1];
@@ -627,14 +719,21 @@ window.Director = window.Director || {};
       const p = pt(e);
       snapshot();
       ed.drag = { f, h: h && h.dataset.h !== 'root' ? h.dataset.h : null, dx: p.x - f.x, dy: p.y - f.y, moved: false };
-      svg.setPointerCapture(e.pointerId);
       renderStage();
       e.preventDefault();
     });
 
     svg.addEventListener('pointermove', e => {
+      if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch) return pointers.size >= 2 && movePinch();
       const d = ed && ed.drag;
       if (!d) return;
+      if (d.pan) {
+        const r = svg.getBoundingClientRect(), k = d.view.w / r.width, mx = e.clientX - d.cx, my = e.clientY - d.cy;
+        if (!d.moved && Math.hypot(mx, my) < 4) return;
+        d.moved = true;
+        return setView(d.view.x - mx * k, d.view.y - my * k, d.view.w);
+      }
       const p = pt(e), f = d.f;
       if (d.text) {
         d.text.dx = Math.round(d.dx + p.x - d.px);
@@ -648,10 +747,19 @@ window.Director = window.Director || {};
       renderStage();
     });
 
-    const end = () => {
+    const end = e => {
+      pointers.delete(e.pointerId);
+      if (pinch) {
+        if (pointers.size < 2) pinch = null;
+        return;
+      }
       const d = ed && ed.drag;
       if (!d) return;
       ed.drag = null;
+      if (d.pan) {
+        if (!d.moved && ed.sel) { ed.sel = null; renderStage(); renderPanel(); }
+        return;
+      }
       if (!d.moved) { ed.hist.pop(); return; }
       commit();
       renderFrames();

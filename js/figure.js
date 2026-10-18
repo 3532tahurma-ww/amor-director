@@ -365,11 +365,14 @@ Director.Figure = (() => {
     [s + 'Foot']: [s + 'Foot', s + 'Knee', s + 'T', s + 'Knee']
   }));
 
-  function handles(f) {
-    const { P } = solve(f), k = 1 / f.scale, far = f.view === 'side' ? 'l' : '-';
+  // unit: ekran pikseli başına sahne birimi; verilirse noktalar yakınlaştırmadan bağımsız parmak boyunda kalır
+  function handles(f, unit) {
+    const { P } = solve(f), k = (unit || 1) / f.scale, far = f.view === 'side' ? 'l' : '-';
+    const [hit, dotR, sw] = unit ? [16, 6.5, 2.2] : [12, 4.5, 2];
+    const r2 = v => Math.round(v * 100) / 100;
     const dot = (name, p, cls) => `<g data-h="${name}" class="h ${cls}">` +
-      `<circle cx="${n1(p.x)}" cy="${n1(p.y)}" r="${n1(12 * k)}" fill="transparent"/>` +
-      `<circle cx="${n1(p.x)}" cy="${n1(p.y)}" r="${n1(4.5 * k)}" stroke-width="${n1(2 * k)}"/></g>`;
+      `<circle cx="${n1(p.x)}" cy="${n1(p.y)}" r="${r2(hit * k)}" fill="transparent"/>` +
+      `<circle cx="${n1(p.x)}" cy="${n1(p.y)}" r="${r2(dotR * k)}" stroke-width="${r2(sw * k)}"/></g>`;
     const names = Object.keys(HANDLES).sort((a, b) => (b[0] === far) - (a[0] === far));
     const extra = (f.limbs || []).map(l => Array.from({ length: l.segs }, (_, i) => dot(`L.${l.id}.${i}`, P[`L.${l.id}.${i}`], 'x')).join('')).join('');
     return `<g data-fig="${f.id}" transform="${transform(f)}">` +
