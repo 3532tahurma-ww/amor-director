@@ -13,7 +13,17 @@ window.Director = window.Director || {};
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const view = $('#view');
-  const W = 480, H = 360, GROUND = 300;
+  const W = Places.W, H = Places.H, GROUND = 300; // 640x360 (16:9)
+
+  // Eski 4:3 (480 genişlik) sahneler: figürler yeni geniş sahnenin ortasına kaydırılır
+  function widen(sc) {
+    if (sc.w === W) return false;
+    const dx = (W - (sc.w || 480)) / 2;
+    sc.frames.forEach(fr => (fr.figs || []).forEach(f => { f.x += dx; }));
+    sc.w = W;
+    return true;
+  }
+  if (Store.state.scenes.map(widen).some(Boolean)) Store.save();
   const PALETTE = {
     skin: ['#f8d9c0', '#f1c7a5', '#d9a47c', '#b07850', '#7a4a2e'],
     hair: ['#1f1a17', '#3b2a20', '#6b3b22', '#b5651d', '#e8c26a', '#c9c9d4', '#ff5d9e', '#7b5cff'],
@@ -142,6 +152,7 @@ window.Director = window.Director || {};
         s.created = s.created || Date.now();
         s.updated = Date.now();
         s.frames.forEach(fr => { fr.figs = Array.isArray(fr.figs) ? fr.figs : []; });
+        widen(s);
         Store.state.scenes.push(s);
       });
       toast(Store.save() ? `${list.length} sahne içe aktarıldı` : 'Depolama dolu, kaydedilemedi');
@@ -154,8 +165,9 @@ window.Director = window.Director || {};
       id: Store.uid(), title: 'Sahne ' + (Store.state.scenes.length + 1), place: 'oda', speed: 1000,
       created: Date.now(), updated: Date.now(), frames: [{ figs: [] }]
     };
-    sc.frames[0].figs.push(Figure.create('m', 180, GROUND, 'Erkek 1'));
-    sc.frames[0].figs.push(Figure.create('f', 300, GROUND, 'Kadın 1'));
+    sc.w = W;
+    sc.frames[0].figs.push(Figure.create('m', W / 2 - 60, GROUND, 'Erkek 1'));
+    sc.frames[0].figs.push(Figure.create('f', W / 2 + 60, GROUND, 'Kadın 1'));
     Store.state.scenes.push(sc);
     Store.save();
     location.hash = '#/scene/' + sc.id;
@@ -180,7 +192,7 @@ window.Director = window.Director || {};
 
   /* ---------- Yakınlaştırma (sahne viewBox'ı) ---------- */
 
-  const MIN_W = 96; // en yakın: sahnenin 1/5'i
+  const MIN_W = W / 5; // en yakın: %500
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const viewH = w => w * H / W;
 
@@ -543,7 +555,7 @@ window.Director = window.Director || {};
       const limbs = fn => allFrames(f.id, x => { const l = (x.limbs || []).find(y => y.id === ed.limb); if (l) fn(l, x); });
       if (act === 'add') {
         const n = cur().figs.length;
-        const fig = Figure.create(b.dataset.g, 120 + (n * 70) % 260, GROUND, nextName(sc, b.dataset.g));
+        const fig = Figure.create(b.dataset.g, 140 + (n * 70) % 360, GROUND, nextName(sc, b.dataset.g));
         sc.frames.forEach(fr => fr.figs.push(JSON.parse(JSON.stringify(fig))));
         ed.sel = fig.id;
       } else if (act === 'place') {

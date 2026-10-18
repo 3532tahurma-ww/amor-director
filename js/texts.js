@@ -7,7 +7,7 @@
 window.Director = window.Director || {};
 
 Director.Texts = (() => {
-  const W = 480, H = 360, LH = 15, CHAR = 6.9;
+  const W = Director.Places.W, H = Director.Places.H, LH = 15, CHAR = 6.9;
   const KINDS = [['speech', 'Konuşma'], ['think', 'Düşünce'], ['caption', 'Altyazı']];
   const FONT = `font-family="-apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="13"`;
   const INK = '#1d1d28';
@@ -42,7 +42,7 @@ Director.Texts = (() => {
     let o = '', capY = H - 8;
 
     list.filter(t => t.kind === 'caption').reverse().forEach(t => {
-      const ls = wrap(t.text.trim(), 56), h = ls.length * LH + 10, y = capY - h;
+      const ls = wrap(t.text.trim(), 76), h = ls.length * LH + 10, y = capY - h;
       o += `<g data-txt="${t.id}" class="txt" ${FONT}><rect x="12" y="${n1(y)}" width="${W - 24}" height="${h}" rx="8" fill="#140f24" fill-opacity=".74"/>` +
         lines(ls, W / 2, y + 5, '#fff', 600) + '</g>';
       capY = y - 4;
